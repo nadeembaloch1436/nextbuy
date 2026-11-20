@@ -29,12 +29,14 @@ from urllib.parse import parse_qs, unquote, urlencode, urlsplit
 from urllib.request import Request, urlopen
 
 ROOT = Path(__file__).resolve().parent
-DB_PATH = ROOT / "nextbuy.db"
-UPLOAD_DIR = ROOT / "uploads"
+DB_PATH = Path(os.environ.get("NEXTBUY_DB_PATH", str(ROOT / "nextbuy.db")).strip())
+UPLOAD_DIR = Path(os.environ.get("NEXTBUY_UPLOAD_DIR", str(ROOT / "uploads")).strip())
+DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 MAX_UPLOAD_BYTES = 2 * 1024 * 1024
 MAX_UPLOAD_REQUEST_BYTES = MAX_UPLOAD_BYTES + 128 * 1024
 HOST = os.environ.get("NEXTBUY_HOST", "127.0.0.1")
-PORT = int(os.environ.get("NEXTBUY_PORT", "8000"))
+PORT = int(os.environ.get("PORT", os.environ.get("NEXTBUY_PORT", "8000")))
 ADMIN_EMAIL = os.environ.get("NEXTBUY_ADMIN_EMAIL", "admin@nextbuy.pk").strip().lower()
 ADMIN_PASSWORD = os.environ.get("NEXTBUY_ADMIN_PASSWORD", "admin123")
 BASE_URL = os.environ.get("NEXTBUY_BASE_URL", "http://localhost:8000").rstrip("/")
@@ -515,7 +517,7 @@ def public_settings(con: sqlite3.Connection) -> dict:
             "freeDeliveryAbove": safe_int(setting_value(con, "free_delivery_above", "0"), "Free delivery threshold", 0, 100_000_000),
             "cityCharges": city_charges if isinstance(city_charges, dict) else {},
             "lowStockLimit": safe_int(setting_value(con, "low_stock_limit", "5"), "Low stock limit", 0, 1_000_000),
-            "whatsappNumber": re.sub(r"\D", "", os.environ.get("NEXTBUY_WHATSAPP_NUMBER", ""))[:15]}
+            "whatsappNumber": re.sub(r"\D", "", os.environ.get("NEXTBUY_WHATSAPP_NUMBER", "").strip() or "923273408820")[:15]}
 
 
 def public_coupon(row: sqlite3.Row) -> dict:
@@ -723,6 +725,12 @@ class StoreHandler(BaseHTTPRequestHandler):
             raise ValueError("Choose a valid JPG, PNG or WebP image.")
         return image, extension
 
+    def server_error(self, exc):
+        import traceback
+        print("Server error on %s %s: %r" % (self.command, self.path.split("?")[0], exc), file=sys.stderr)
+        traceback.print_exc(file=sys.stderr)
+        return self.respond({"error": "Something went wrong on our side. Please try again in a moment."}, HTTPStatus.INTERNAL_SERVER_ERROR)
+
     def current_user(self, con):
         cookie = SimpleCookie()
         try:
@@ -762,6 +770,10 @@ class StoreHandler(BaseHTTPRequestHandler):
             with db() as con:
                 if path == "/api/health":
                     return self.respond({"ok": True, "store": "NextBuy.pk", "database": "SQLite"})
+                if path == "/api/config":
+                    sms_ready = os.environ.get("NEXTBUY_DEMO_OTP") == "1" or bool(
+                        os.environ.get("NEXTBUY_SMS_PROVIDER_URL", "").strip() and os.environ.get("NEXTBUY_SMS_API_KEY", "").strip())
+                    return self.respond({"phoneLogin": sms_ready, "emailLogin": True})
                 if path == "/api/catalog":
                     rows = con.execute("SELECT * FROM products ORDER BY id").fetchall()
                     return self.respond({"products": [public_product(p) for p in rows]})
@@ -863,7 +875,7 @@ class StoreHandler(BaseHTTPRequestHandler):
                                                    "totalProducts": len(prows), "totalUsers": len(urows)}})
             return self.serve_static(path)
         except Exception as exc:
-            return self.respond({"error": "Server error: " + str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.server_error(exc)
 
     def do_POST(self):
         path = unquote(urlsplit(self.path).path)
@@ -1185,7 +1197,7 @@ class StoreHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             return self.respond({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            return self.respond({"error": "Server error: " + str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.server_error(exc)
 
     def do_PUT(self):
         path = unquote(urlsplit(self.path).path)
@@ -1246,7 +1258,7 @@ class StoreHandler(BaseHTTPRequestHandler):
         except sqlite3.IntegrityError:
             return self.respond({"error": "That value already exists."}, HTTPStatus.CONFLICT)
         except Exception as exc:
-            return self.respond({"error": "Server error: " + str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.server_error(exc)
 
     def do_DELETE(self):
         path = unquote(urlsplit(self.path).path)
@@ -1278,7 +1290,7 @@ class StoreHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             return self.respond({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            return self.respond({"error": "Server error: " + str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.server_error(exc)
 
     def do_PATCH(self):
         path = unquote(urlsplit(self.path).path)
@@ -1332,7 +1344,7 @@ class StoreHandler(BaseHTTPRequestHandler):
         except ValueError as exc:
             return self.respond({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
         except Exception as exc:
-            return self.respond({"error": "Server error: " + str(exc)}, HTTPStatus.INTERNAL_SERVER_ERROR)
+            return self.server_error(exc)
 
     def serve_upload(self, path: str):
         prefix = "/uploads/"

@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: nextbuy-pk-api-2026-11-19
+    runtime: python
+    plan: starter
+    buildCommand: python --version
+    startCommand: python server.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: NEXTBUY_HOST
+        value: 0.0.0.0
+      - key: NEXTBUY_DB_PATH
+        value: /var/data/nextbuy.db
+      - key: NEXTBUY_UPLOAD_DIR
+        value: /var/data/uploads
+      - key: NEXTBUY_BASE_URL
+        sync: false
+      - key: NEXTBUY_COOKIE_SECURE
+        value: "1"
+      - key: NEXTBUY_ADMIN_PASSWORD
+        sync: false
+      - key: NEXTBUY_WHATSAPP_NUMBER
+        value: "923273408820"
+      - key: NEXTBUY_DEMO_OTP
+        value: "0"
+    disk:
+      name: nextbuy-data
+      mountPath: /var/data
+      sizeGB: 1

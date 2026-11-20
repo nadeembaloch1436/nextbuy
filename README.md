@@ -27,3 +27,17 @@ For a different initial admin password, set the `NEXTBUY_ADMIN_PASSWORD` environ
 ## Hosting
 
 This setup runs the frontend and backend on the same computer at localhost. Customers outside that computer cannot reach the store until the folder is deployed to a web host with Python support and HTTPS. Real SMS and online payments need provider accounts and credentials.
+
+## Netlify
+
+Netlify can publish the storefront files, but it does not run this Python server.py backend. Login, sign-up, orders and admin features need the Python server hosted separately. Configure Netlify to proxy /api/* (and /uploads/*) to that backend, and give the backend persistent storage for the SQLite database and uploaded images. Do not publish nextbuy.db or server secrets as static files.
+
+## Netlify and Render
+
+The Netlify build files in this folder publish only the storefront and proxy its API requests to a separate Python backend. To finish the connection:
+
+1. Connect this GitHub repository to Netlify. Set NEXTBUY_API_ORIGIN in Netlify to the Render service URL after the backend is deployed.
+2. Create a Render Blueprint from render.yaml. Enter your Netlify site URL for NEXTBUY_BASE_URL and choose a strong NEXTBUY_ADMIN_PASSWORD.
+3. Copy the Render HTTPS service URL into Netlify's NEXTBUY_API_ORIGIN environment setting and redeploy the site.
+
+The Render service uses a persistent disk for the SQLite database and uploads. Render requires a paid web service for persistent disks. Do not deploy the root folder as a public static directory; the Netlify build publishes only index.html, app.js, and features.js.

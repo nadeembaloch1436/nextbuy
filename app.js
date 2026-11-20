@@ -22,6 +22,11 @@
 
   function notifyError(error, id) {
     var message = error && error.message ? error.message : "Please try again.";
+    if (error && (error.name === "TypeError" || message === "Failed to fetch")) {
+      message = location.protocol === "file:"
+        ? "This page was opened as a local file. Start the website server, then open http://localhost:8000 to sign in."
+        : "The store server could not be reached. Reopen the store from its website address and try again.";
+    }
     if (id) showError(id, message);
     else if (typeof toast === "function") toast(message);
   }
@@ -340,7 +345,7 @@
       }
     } catch (error) {
       var warning = document.getElementById("backendNotice");
-      if (warning) { warning.hidden = false; warning.textContent = "Store server is not connected. Start server.py and open this site at http://localhost:8000."; }
+      if (warning) { warning.hidden = false; warning.textContent = "Store server is not connected. Start server.py and open http://localhost:8000. Friends need the hosted website address to sign up from their own devices."; }
       else if (typeof toast === "function") toast("Start the NextBuy server to load the store.");
       console.error("NextBuy backend connection failed:", error);
     }
@@ -396,5 +401,31 @@
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
     if (toTop) toTop.addEventListener("click", function () { window.scrollTo({ top: 0, behavior: "smooth" }); });
+  });
+
+  // ----- Hide phone login when no SMS provider is configured -----
+  document.addEventListener("DOMContentLoaded", function () {
+    fetch("/api/config", { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (cfg) {
+      if (cfg && cfg.phoneLogin === false) {
+        var tab = document.querySelector('[data-auth="phonePanel"]');
+        if (tab) tab.style.display = "none";
+        var panel = document.getElementById("phonePanel");
+        if (panel) panel.style.display = "none";
+      }
+    }).catch(function () {});
+  });
+
+  // ----- Policy dialogs (Privacy, Terms, Returns, About) -----
+  document.addEventListener("click", function (event) {
+    var link = event.target.closest && event.target.closest("[data-policy]");
+    if (link) {
+      event.preventDefault();
+      var dlg = document.getElementById("policy-" + link.dataset.policy);
+      if (dlg && typeof dlg.showModal === "function") dlg.showModal();
+      return;
+    }
+    var close = event.target.closest && event.target.closest("[data-policy-close]");
+    if (close) { var d = close.closest("dialog"); if (d) d.close(); }
+    else if (event.target.matches && event.target.matches("dialog.policy-dialog")) event.target.close();
   });
 }());
