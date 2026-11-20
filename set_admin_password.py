@@ -6,7 +6,6 @@ import sys
 
 import server
 
-
 def main() -> None:
     if not server.DB_PATH.is_file():
         raise SystemExit("Database not found: %s. Start the site once before changing its admin password." % server.DB_PATH)
